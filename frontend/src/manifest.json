@@ -1,0 +1,10 @@
+{
+  "name": "TerminalMBA",
+  "short_name": "TerminalMBA",
+  "description": "AI Coding Agent Session Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1d23",
+  "theme_color": "#0f0f0f",
+  "icons": []
+}
