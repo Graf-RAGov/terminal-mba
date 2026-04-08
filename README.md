@@ -12,7 +12,6 @@ Browser dashboard for managing AI coding agent sessions. Built with FastAPI + Ty
 - **Frontend**: Plain JS → vanilla TypeScript (Bun build only, no Node runtime)
 - **Search**: rapidfuzz for fuzzy matching
 - **SQLite**: Native `sqlite3` module instead of CLI
-- **Agents**: Added Claude Extension support
 
 ## Install
 
