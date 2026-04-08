@@ -275,9 +275,14 @@ def restart(
     typer.echo(f"\n  Stopping TerminalMBA on port {port}...")
     try:
         result = subprocess.run(
-            ["bash", "-c", f"lsof -ti:{port} | xargs kill -9 2>/dev/null"],
-            capture_output=True, timeout=5,
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True, timeout=5, text=True,
         )
+        if result.stdout.strip():
+            for pid_str in result.stdout.strip().split("\n"):
+                pid_str = pid_str.strip()
+                if pid_str.isdigit():
+                    os.kill(int(pid_str), signal.SIGKILL)
         typer.echo("  Stopped.")
     except Exception:
         typer.echo("  No running instance found.")
@@ -294,11 +299,18 @@ def stop(
 ):
     """Stop the server."""
     try:
-        subprocess.run(
-            ["bash", "-c", f"lsof -ti:{port} | xargs kill -9 2>/dev/null"],
-            capture_output=True, timeout=5,
+        result = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True, timeout=5, text=True,
         )
-        typer.echo(f"\n  TerminalMBA stopped (port {port})\n")
+        if result.stdout.strip():
+            for pid_str in result.stdout.strip().split("\n"):
+                pid_str = pid_str.strip()
+                if pid_str.isdigit():
+                    os.kill(int(pid_str), signal.SIGKILL)
+            typer.echo(f"\n  TerminalMBA stopped (port {port})\n")
+        else:
+            typer.echo(f"\n  No TerminalMBA running on port {port}\n")
     except Exception:
         typer.echo(f"\n  No TerminalMBA running on port {port}\n")
 
@@ -332,12 +344,18 @@ def remote_add(
 ):
     """Add a remote and set up SSH key access."""
     from .remote import (
-        ensure_remote_setup, generate_key, get_remote, install_key_on_remote,
-        load_remotes_config, pull_remote, save_remotes_config,
+        _validate_name, ensure_remote_setup, generate_key, get_remote,
+        install_key_on_remote, load_remotes_config, pull_remote,
+        save_remotes_config,
     )
 
     if not name:
         name = host.split("@")[-1].replace(".", "-")
+
+    # Sanitize auto-generated or user-provided name
+    import re
+    name = re.sub(r'[^a-zA-Z0-9_-]', '-', name)
+    _validate_name(name)
 
     if get_remote(name):
         typer.echo(f"\n  Remote '{name}' already exists. Remove it first.\n")

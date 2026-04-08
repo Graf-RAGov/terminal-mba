@@ -682,6 +682,22 @@ async function renderAnalytics(container: HTMLElement): Promise<void> {
     }
     html += "</div></div>";
 
+    // Host breakdown (only show if multiple hosts)
+    const hosts = Object.entries(data.byHost || {}) as [string, any][];
+    if (hosts.length > 1) {
+      const maxHostCost = Math.max(...hosts.map(([, h]) => h.cost), 0.01);
+      html += '<div class="chart-section"><h3>By Host</h3><div class="hbar-chart">';
+      for (const [host, info] of hosts) {
+        const pct = (info.cost / maxHostCost) * 100;
+        html += `<div class="hbar-row">
+          <span class="hbar-name">${escHtml(host)}</span>
+          <div class="hbar-track"><div class="hbar-fill host-fill" style="width:${pct}%"></div></div>
+          <span class="hbar-val">$${info.cost.toFixed(2)} (${info.sessions})</span>
+        </div>`;
+      }
+      html += "</div></div>";
+    }
+
     // Top sessions
     html += '<div class="chart-section"><h3>Top Sessions by Cost</h3><div class="hbar-chart">';
     const topMax = Math.max(...(data.topSessions || []).map((s: any) => s.cost), 0.01);

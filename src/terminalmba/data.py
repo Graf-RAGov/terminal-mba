@@ -1066,16 +1066,28 @@ def load_sessions() -> list[dict]:
 
     # 8. Merge cached remote sessions
     try:
+        import re as _re
         from .remote import get_hostname, load_all_cached_remotes
         local_hostname = get_hostname()
         for s in sessions.values():
             if "host" not in s:
                 s["host"] = local_hostname
                 s["remote"] = False
+        _valid_id = _re.compile(r"^[a-f0-9-]+$")
         for rs in load_all_cached_remotes():
             rid = rs.get("id")
-            if rid and rid not in sessions:
-                sessions[rid] = rs
+            # Validate: id must be UUID-like, required fields must exist
+            if not rid or not _valid_id.match(rid):
+                continue
+            if not rs.get("tool") or not isinstance(rs.get("messages"), int):
+                continue
+            if rid in sessions:
+                continue
+            # Strip internal fields that could leak local paths (except _cost)
+            sanitized = {k: v for k, v in rs.items() if not k.startswith("_") or k == "_cost"}
+            # Remote sessions cannot provide local detail
+            sanitized["has_detail"] = False
+            sessions[rid] = sanitized
     except Exception:
         pass
 

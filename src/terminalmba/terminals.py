@@ -1,8 +1,10 @@
 """Terminal detection, launch, and focus."""
 
 import os
+import re
 import subprocess
 import sys
+import shlex
 import shutil
 import json
 
@@ -66,17 +68,22 @@ def detect_terminals() -> list[dict]:
 def open_in_terminal(session_id: str, tool: str = "claude", flags: list[str] | None = None,
                      project_dir: str = "", terminal_id: str = "") -> None:
     """Open a session in a terminal."""
+    # Validate session_id to prevent command injection
+    if not re.match(r'^[a-f0-9-]+$', session_id):
+        raise ValueError("Invalid session ID")
+
     flags = flags or []
     skip_perms = "skip-permissions" in flags
 
+    safe_session_id = shlex.quote(session_id)
     if tool == "codex":
-        cmd = f"codex resume {session_id}"
+        cmd = f"codex resume {safe_session_id}"
     else:
-        cmd = f"claude --resume {session_id}"
+        cmd = f"claude --resume {safe_session_id}"
         if skip_perms:
             cmd += " --dangerously-skip-permissions"
 
-    cd_part = f"cd {json.dumps(project_dir)} && " if project_dir else ""
+    cd_part = f"cd {shlex.quote(project_dir)} && " if project_dir else ""
     full_cmd = cd_part + cmd
     escaped_cmd = full_cmd.replace('"', '\\"')
 

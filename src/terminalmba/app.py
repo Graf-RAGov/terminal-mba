@@ -1,15 +1,20 @@
 """FastAPI application with all API routes."""
 
+import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 import orjson
+
+logger = logging.getLogger(__name__)
 
 from . import __version__
 from .data import (
@@ -35,6 +40,30 @@ class ORJSONResponse(JSONResponse):
 
 
 app = FastAPI(title="TerminalMBA", version=__version__, default_response_class=ORJSONResponse)
+
+# ── CORS ──────────────────────────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3847", "http://127.0.0.1:3847"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_LOCALHOST_HOSTS = {"localhost", "127.0.0.1"}
+
+
+@app.middleware("http")
+async def check_origin_for_mutations(request: Request, call_next):
+    """Block cross-origin mutating requests (POST/DELETE) from non-localhost origins."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        if origin:
+            parsed = urlparse(origin)
+            if parsed.hostname not in _LOCALHOST_HOSTS:
+                return ORJSONResponse({"error": "Forbidden origin"}, status_code=403)
+    return await call_next(request)
+
 
 # ── Frontend serving ───────────────────────────────────────
 
@@ -173,7 +202,8 @@ async def api_launch(request: Request):
         )
         return {"ok": True}
     except Exception as e:
-        return ORJSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("launch failed")
+        return ORJSONResponse({"ok": False, "error": "Operation failed"}, status_code=400)
 
 
 # ── Focus ──────────────────────────────────────────────────
@@ -185,7 +215,8 @@ async def api_focus(request: Request):
         result = focus_terminal_by_pid(body.get("pid", 0))
         return result
     except Exception as e:
-        return ORJSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("focus failed")
+        return ORJSONResponse({"ok": False, "error": "Operation failed"}, status_code=400)
 
 
 # ── Open IDE ───────────────────────────────────────────────
@@ -197,15 +228,20 @@ async def api_open_ide(request: Request):
         ide = body.get("ide", "")
         project = body.get("project", "")
         target = project
+        if ".." in (target or ""):
+            return ORJSONResponse({"ok": False, "error": "Invalid path"}, status_code=400)
         if target and os.path.exists(target) and not os.path.isdir(target):
             target = os.path.dirname(target)
+        if target and not os.path.isdir(target):
+            return ORJSONResponse({"ok": False, "error": "Directory not found"}, status_code=400)
         if ide == "cursor":
             subprocess.Popen(["cursor", target or "."])
         elif ide == "code":
             subprocess.Popen(["code", target or "."])
         return {"ok": True}
     except Exception as e:
-        return ORJSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("open-ide failed")
+        return ORJSONResponse({"ok": False, "error": "Operation failed"}, status_code=400)
 
 
 # ── Git commits ────────────────────────────────────────────
@@ -254,7 +290,8 @@ async def api_convert(request: Request):
         )
         return result
     except Exception as e:
-        return ORJSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("convert failed")
+        return ORJSONResponse({"ok": False, "error": "Operation failed"}, status_code=400)
 
 
 # ── Bulk Delete ────────────────────────────────────────────
@@ -269,7 +306,8 @@ async def api_bulk_delete(request: Request):
             results.append({"id": s.get("id", ""), "deleted": deleted})
         return {"ok": True, "results": results}
     except Exception as e:
-        return ORJSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        logger.exception("bulk-delete failed")
+        return ORJSONResponse({"ok": False, "error": "Operation failed"}, status_code=400)
 
 
 # ── Version ────────────────────────────────────────────────

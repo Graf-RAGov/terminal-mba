@@ -3,6 +3,7 @@
 import gzip
 import json
 import os
+import re
 import socket
 import subprocess
 import time
@@ -26,6 +27,12 @@ def get_hostname() -> str:
     return socket.gethostname().split(".")[0]
 
 
+def _validate_name(name: str) -> None:
+    """Validate remote name to prevent path traversal."""
+    if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        raise ValueError(f"Invalid remote name: {name!r} (must match [a-zA-Z0-9_-]+)")
+
+
 # ── Config ────────────────────────────────────────────────
 
 
@@ -45,6 +52,7 @@ def save_remotes_config(remotes: list[dict]) -> None:
 
 
 def get_remote(name: str) -> dict | None:
+    _validate_name(name)
     for r in load_remotes_config():
         if r["name"] == name:
             return r
@@ -57,8 +65,13 @@ def get_remote(name: str) -> dict | None:
 def sync_export() -> bytes:
     """Export all local sessions as gzipped JSON. Called via SSH."""
     from .data import load_sessions
+    from .cost import compute_session_cost
     hostname = get_hostname()
     sessions = load_sessions()
+    for s in sessions:
+        cost = compute_session_cost(s["id"], s.get("project", ""))
+        if cost["cost"] > 0 or cost["inputTokens"] > 0:
+            s["_cost"] = cost
     payload = {"hostname": hostname, "timestamp": time.time(), "sessions": sessions}
     raw = orjson.dumps(payload)
     return gzip.compress(raw)
@@ -73,10 +86,10 @@ def pull_remote(remote: dict) -> dict:
     host = remote["host"]
     key_file = KEYS_DIR / name
 
-    ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10"]
+    ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10"]
     if key_file.exists():
         ssh_cmd += ["-i", str(key_file)]
-    ssh_cmd += [host, "bash", "-lc", "terminalmba sync-export"]
+    ssh_cmd += [host, "export PATH=$HOME/.local/bin:$PATH && terminalmba sync-export"]
 
     try:
         result = subprocess.run(ssh_cmd, capture_output=True, timeout=30)
@@ -93,17 +106,16 @@ def pull_remote(remote: dict) -> dict:
         cache_file.write_bytes(result.stdout)
 
         sessions = payload.get("sessions", [])
-        hostname = payload.get("hostname", name)
 
-        # Tag sessions with host info
+        # Use the configured remote name as hostname, not self-reported value
         for s in sessions:
-            s["host"] = hostname
+            s["host"] = name
             s["remote"] = True
 
         return {
             "ok": True,
             "name": name,
-            "hostname": hostname,
+            "hostname": name,
             "sessions": len(sessions),
             "timestamp": time.time(),
         }
@@ -127,16 +139,17 @@ def pull_all_remotes() -> list[dict]:
 
 def load_cached_remote(name: str) -> tuple[list[dict], float | None]:
     """Load cached remote sessions. Returns (sessions, cache_mtime)."""
+    _validate_name(name)
     cache_file = REMOTES_CACHE_DIR / f"{name}.json.gz"
     if not cache_file.exists():
         return [], None
     try:
         raw = gzip.decompress(cache_file.read_bytes())
         payload = orjson.loads(raw)
-        hostname = payload.get("hostname", name)
+        # Use the configured remote name as hostname, not self-reported value
         sessions = payload.get("sessions", [])
         for s in sessions:
-            s["host"] = hostname
+            s["host"] = name
             s["remote"] = True
         return sessions, cache_file.stat().st_mtime
     except Exception:
@@ -181,6 +194,7 @@ def get_remotes_status() -> list[dict]:
 
 def generate_key(name: str) -> str:
     """Generate ed25519 keypair for a remote. Returns public key."""
+    _validate_name(name)
     _ensure_dirs()
     key_file = KEYS_DIR / name
     if key_file.exists():
@@ -197,7 +211,7 @@ def ensure_remote_setup(host: str) -> dict:
     """Ensure uv and terminalmba are installed on remote."""
     install_script = (
         'export PATH="$HOME/.local/bin:$PATH" && '
-        '(command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh) && '
+        '(command -v uv >/dev/null 2>&1 || curl --proto =https -LsSf https://astral.sh/uv/0.11.4/install.sh | sh) && '
         'uv tool install "terminalmba @ git+https://github.com/Graf-RAGov/terminal-mba.git" --force 2>&1 || true'
     )
     try:
@@ -215,7 +229,7 @@ def ensure_remote_setup(host: str) -> dict:
 def install_key_on_remote(host: str, public_key: str) -> dict:
     """Install restricted key on remote's authorized_keys."""
     # Build the restricted authorized_keys entry
-    forced_command = 'command="bash -lc \'terminalmba sync-export\'",no-port-forwarding,no-X11-forwarding,no-agent-forwarding'
+    forced_command = 'restrict,command="export PATH=$HOME/.local/bin:$PATH && terminalmba sync-export"'
     entry = f'{forced_command} {public_key}'
 
     # Use ssh to append to authorized_keys
@@ -223,7 +237,7 @@ def install_key_on_remote(host: str, public_key: str) -> dict:
 
     try:
         result = subprocess.run(
-            ["ssh", "-o", "StrictHostKeyChecking=accept-new", host, "bash", "-c", json.dumps(script)],
+            ["ssh", "-o", "StrictHostKeyChecking=yes", host, "bash", "-c", json.dumps(script)],
             capture_output=True, timeout=30,
         )
         if result.returncode != 0:
@@ -238,6 +252,7 @@ def install_key_on_remote(host: str, public_key: str) -> dict:
 
 def remove_remote(name: str) -> None:
     """Remove remote config, key, and cache."""
+    _validate_name(name)
     remotes = load_remotes_config()
     remotes = [r for r in remotes if r["name"] != name]
     save_remotes_config(remotes)

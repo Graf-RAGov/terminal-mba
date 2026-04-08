@@ -162,6 +162,7 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
     by_project: dict = {}
     by_week: dict = {}
     by_agent: dict = {}
+    by_host: dict = {}
     total_cost = 0
     total_tokens = 0
     total_input_tokens = 0
@@ -181,7 +182,8 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
             by_agent[s["tool"]] = {"cost": 0, "sessions": 0, "tokens": 0, "estimated": False}
 
     for s in sessions:
-        cost_data = compute_session_cost(s["id"], s.get("project", ""))
+        # Use pre-computed cost from remote sync if available
+        cost_data = s.get("_cost") or compute_session_cost(s["id"], s.get("project", ""))
         cost = cost_data["cost"]
         tokens = (cost_data["inputTokens"] + cost_data["outputTokens"]
                   + cost_data["cacheReadTokens"] + cost_data["cacheCreateTokens"])
@@ -246,6 +248,13 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
         by_project[proj]["sessions"] += 1
         by_project[proj]["tokens"] += tokens
 
+        host = s.get("host", "local")
+        if host not in by_host:
+            by_host[host] = {"cost": 0, "sessions": 0, "tokens": 0}
+        by_host[host]["cost"] += cost
+        by_host[host]["sessions"] += 1
+        by_host[host]["tokens"] += tokens
+
         session_costs.append({"id": s["id"], "cost": cost, "project": proj, "date": s.get("date", "")})
 
     session_costs.sort(key=lambda x: x["cost"], reverse=True)
@@ -277,5 +286,6 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
         "byProject": by_project,
         "topSessions": session_costs[:10],
         "byAgent": by_agent,
+        "byHost": by_host,
         "agentNoCostData": agent_no_cost_data,
     }
