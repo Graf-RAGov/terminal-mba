@@ -43,6 +43,12 @@ tests/
 - **Database**: Python sqlite3 module for OpenCode/Kiro (NOT sqlite3 CLI)
 - **Tests**: pytest + pytest-asyncio + httpx
 
+## Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) — Python package/project manager
+- [Bun](https://bun.sh/) — JS bundler (only needed for frontend builds)
+
 ## Key conventions
 
 - Use `UV_CACHE_DIR=/tmp/uv-cache` for all uv commands on this system

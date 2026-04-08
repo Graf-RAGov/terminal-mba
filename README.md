@@ -36,6 +36,20 @@ terminalmba update       # Check for updates
 terminalmba stop         # Stop the server
 ```
 
+## Prerequisites
+
+- **Python 3.12+** — [python.org](https://www.python.org/downloads/)
+- **[uv](https://docs.astral.sh/uv/)** — Python package/project manager
+- **[Bun](https://bun.sh/)** — JS bundler (only needed for frontend builds)
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Bun
+curl -fsSL https://bun.sh/install | bash
+```
+
 ## Development
 
 ```bash
