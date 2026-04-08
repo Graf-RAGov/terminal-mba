@@ -408,6 +408,10 @@ let deepSearchMatchIds: Set<string> = new Set();
 function onSearchInput(value: string): void {
   searchQuery = value;
   deepSearchMatchIds = new Set();
+  const url = new URL(window.location.href);
+  if (value) url.searchParams.set("q", value);
+  else url.searchParams.delete("q");
+  history.replaceState(null, "", url.toString());
   filterAndRender();
 
   // Deep search with debounce
@@ -701,14 +705,54 @@ function renderSettings(container: HTMLElement): void {
   </div>`;
 }
 
+// ── Privacy Mode ─────────────────────────────────────────────
+
+function togglePrivacy(): void {
+  const html = document.documentElement;
+  const isOn = html.getAttribute("data-privacy") === "on";
+  const newState = isOn ? "off" : "on";
+  html.setAttribute("data-privacy", newState);
+  localStorage.setItem("terminalmba-privacy", newState);
+  updatePrivacyButton(newState === "on");
+}
+
+function updatePrivacyButton(isOn: boolean): void {
+  const btn = document.getElementById("privacyToggle");
+  const label = document.getElementById("privacyLabel");
+  if (!btn) return;
+  btn.classList.toggle("active", isOn);
+  if (label) label.textContent = isOn ? "ON" : "Privacy";
+  // Swap eye icon: open eye vs slashed eye
+  const svg = btn.querySelector("svg");
+  if (svg) {
+    svg.innerHTML = isOn
+      ? '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────
 
 // Apply saved theme
 const savedTheme = localStorage.getItem("terminalmba-theme") || "dark";
 document.documentElement.setAttribute("data-theme", savedTheme);
 
+// Apply saved privacy mode
+const savedPrivacy = localStorage.getItem("terminalmba-privacy") || "off";
+document.documentElement.setAttribute("data-privacy", savedPrivacy);
+requestAnimationFrame(() => updatePrivacyButton(savedPrivacy === "on"));
+
 // Load data
-fetchSessions();
+fetchSessions().then(() => {
+  const urlQ = new URLSearchParams(window.location.search).get("q");
+  if (urlQ) {
+    searchQuery = urlQ;
+    const input = document.getElementById("searchInput") as HTMLInputElement;
+    if (input) input.value = urlQ;
+    filterAndRender();
+    if (urlQ.length >= 2) onSearchInput(urlQ);
+  }
+});
 fetchVersion();
 fetchActive();
 
@@ -724,6 +768,7 @@ document.addEventListener("keydown", (e) => {
 Object.assign(window, {
   switchView,
   toggleLayout,
+  togglePrivacy,
   onSearchInput,
   setTheme,
   showDetail,
