@@ -11,7 +11,7 @@ import typer
 
 from . import __version__
 
-app = typer.Typer(name="terminalmba", help="AI coding agent session dashboard")
+app = typer.Typer(name="terminalmba", help="AI coding agent session dashboard (Python fork of codedash)")
 
 DEFAULT_PORT = 3847
 DEFAULT_HOST = "localhost"

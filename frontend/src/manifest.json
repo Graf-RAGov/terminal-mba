@@ -1,7 +1,7 @@
 {
   "name": "TerminalMBA",
   "short_name": "TerminalMBA",
-  "description": "AI Coding Agent Session Dashboard",
+  "description": "AI coding agent session dashboard (Python fork of codedash)",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1d23",

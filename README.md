@@ -1,4 +1,4 @@
-# TerminalMBA
+# TerminalMBA (Python fork of codedash)
 
 A fork of [codedash](https://github.com/vakovalskii/codedash) by [@vakovalskii](https://github.com/vakovalskii), rewritten from scratch in a single Claude Code session.
 
@@ -54,7 +54,13 @@ cd frontend && bun install && bun run build
 
 ## Tech stack
 
-- **Backend**: Python 3.12+, FastAPI, Uvicorn, Typer, orjson, rapidfuzz
-- **Frontend**: Vanilla TypeScript, Bun (build only), no frameworks
-- **Database**: Python sqlite3 module for OpenCode/Kiro
-- **Tests**: pytest + pytest-asyncio + httpx
+- **FastAPI** + **Uvicorn** — API
+- **Typer** — CLI
+- **orjson** — JSON parsing
+- **rapidfuzz** — fuzzy search
+- **Vanilla TypeScript** + **Web Components** — frontend
+- **Bun** — bundler / dev server / PM
+- **Hand-written `sw.ts` + `manifest.json`** — PWA
+- **Vanilla CSS** custom properties — styling
+- **Playwright** — E2E testing
+- **pytest** + **httpx** — unit/API tests

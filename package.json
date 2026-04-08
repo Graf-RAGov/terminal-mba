@@ -1,7 +1,7 @@
 {
   "name": "terminalmba",
   "version": "1.0.0",
-  "description": "AI coding agent session dashboard. Python reimplementation of codedash by @vakovalskii, rewritten from scratch in a single shot Claude Code session.",
+  "description": "AI coding agent session dashboard (Python fork of codedash)",
   "main": "index.js",
   "directories": {
     "test": "tests"

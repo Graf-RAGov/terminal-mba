@@ -1,7 +1,7 @@
 [project]
 name = "terminalmba"
 version = "0.1.0"
-description = "AI coding agent session dashboard"
+description = "AI coding agent session dashboard (Python fork of codedash)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
