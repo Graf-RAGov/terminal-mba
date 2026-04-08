@@ -19,6 +19,8 @@ interface Session {
   last_time: string;
   date: string;
   git_root: string;
+  host?: string;
+  remote?: boolean;
 }
 
 interface ActiveInfo {
@@ -36,6 +38,7 @@ let currentView = "sessions";
 let layout = localStorage.getItem("terminalmba-layout") || "grid";
 let searchQuery = "";
 let toolFilter: string | null = null;
+let hostFilter: string | null = null;
 let activeSessions: Record<string, ActiveInfo> = {};
 let stars: string[] = JSON.parse(localStorage.getItem("terminalmba-stars") || "[]");
 let tags: Record<string, string[]> = JSON.parse(localStorage.getItem("terminalmba-tags") || "{}");
@@ -124,6 +127,7 @@ async function fetchSessions(): Promise<void> {
     const resp = await fetch("/api/sessions");
     allSessions = await resp.json();
     filterAndRender();
+    updateHostSidebar();
   } catch (e) {
     console.error("Failed to fetch sessions:", e);
   }
@@ -158,11 +162,56 @@ async function fetchVersion(): Promise<void> {
   } catch {}
 }
 
+async function syncRemotes(): Promise<void> {
+  const btn = document.getElementById("syncBtn");
+  if (btn) btn.classList.add("syncing");
+  showToast("Syncing remotes...");
+  try {
+    const resp = await fetch("/api/remotes/pull", { method: "POST" });
+    const results = await resp.json();
+    const ok = results.filter((r: any) => r.ok).length;
+    const fail = results.filter((r: any) => !r.ok).length;
+    if (fail > 0) showToast(`Synced ${ok}, failed ${fail}`);
+    else if (ok > 0) showToast(`Synced ${ok} remote${ok > 1 ? "s" : ""}`);
+    else showToast("No remotes configured");
+    await fetchSessions();
+    updateHostSidebar();
+  } catch {
+    showToast("Sync failed");
+  } finally {
+    if (btn) btn.classList.remove("syncing");
+  }
+}
+
+function updateHostSidebar(): void {
+  const container = document.getElementById("hostFilters");
+  if (!container) return;
+  const hosts = new Map<string, number>();
+  for (const s of allSessions) {
+    const h = s.host || "local";
+    hosts.set(h, (hosts.get(h) || 0) + 1);
+  }
+  if (hosts.size <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+  let html = '<div class="sidebar-section">Hosts</div>';
+  for (const [host, count] of hosts) {
+    const active = hostFilter === host ? "active" : "";
+    html += `<div class="sidebar-item ${active}" data-view="host:${escHtml(host)}" onclick="switchView('host:${escHtml(host)}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      ${escHtml(host)} <span class="sidebar-count">${count}</span>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
 // ── Filtering ─────────────────────────────────────────────────
 
 function filterAndRender(): void {
   filteredSessions = allSessions.filter((s) => {
     if (toolFilter && s.tool !== toolFilter) return false;
+    if (hostFilter && (s.host || "") !== hostFilter) return false;
     if (currentView === "starred" && !stars.includes(s.id)) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -232,9 +281,12 @@ function renderCard(s: Session): string {
   const sessionTags = tags[s.id] || [];
   const tagBadges = sessionTags.map((t: string) => `<span class="tag-pill">${escHtml(t)}</span>`).join("");
 
+  const hostBadge = s.remote ? `<span class="host-badge">${escHtml(s.host || "remote")}</span>` : "";
+
   return `<div class="card ${activeClass} ${starred}" onclick="showDetail('${s.id}')" data-id="${s.id}">
     <div class="card-top">
       ${getToolBadge(s.tool)}
+      ${hostBadge}
       ${activeBadge}
       <span class="card-time">${timeAgo(s.last_ts)}</span>
     </div>
@@ -368,6 +420,7 @@ function exportSession(sessionId: string): void {
 function switchView(view: string): void {
   currentView = view;
   toolFilter = null;
+  hostFilter = null;
   renderLimit = RENDER_PAGE_SIZE;
 
   // Handle agent filters
@@ -380,6 +433,12 @@ function switchView(view: string): void {
   };
   if (agentViews[view]) {
     toolFilter = agentViews[view];
+    currentView = "sessions";
+  }
+
+  // Handle host filters
+  if (view.startsWith("host:")) {
+    hostFilter = view.slice(5);
     currentView = "sessions";
   }
 
@@ -778,5 +837,6 @@ Object.assign(window, {
   exportSession,
   loadMoreSessions,
   switchToProjectFilter,
+  syncRemotes,
   render,
 });

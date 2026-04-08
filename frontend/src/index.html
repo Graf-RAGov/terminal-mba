@@ -40,6 +40,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         Starred
     </div>
+    <div id="hostFilters"></div>
     <div class="sidebar-divider"></div>
     <div class="sidebar-section">Agents</div>
     <div class="sidebar-item" data-view="claude-only" onclick="switchView('claude-only')">
@@ -88,6 +89,9 @@
             </div>
         </div>
         <div class="toolbar-right">
+            <button class="btn-icon" id="syncBtn" onclick="syncRemotes()" title="Sync remote sessions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            </button>
             <div class="theme-switcher">
                 <button class="btn-sm" onclick="setTheme('dark')">Dark</button>
                 <button class="btn-sm" onclick="setTheme('light')">Light</button>

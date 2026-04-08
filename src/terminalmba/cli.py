@@ -309,5 +309,182 @@ def version():
     typer.echo(__version__)
 
 
+# ── Sync Export (called via SSH) ──────────────────────────
+
+
+@app.command("sync-export", hidden=True)
+def sync_export_cmd():
+    """Export sessions as gzipped JSON to stdout (for remote sync)."""
+    from .remote import sync_export
+    sys.stdout.buffer.write(sync_export())
+
+
+# ── Remote Subcommands ────────────────────────────────────
+
+remote_app = typer.Typer(name="remote", help="Manage remote session sources")
+app.add_typer(remote_app)
+
+
+@remote_app.command("add")
+def remote_add(
+    host: str = typer.Argument(..., help="SSH host (e.g. vadim@192.168.1.198)"),
+    name: str = typer.Option("", "--name", "-n", help="Friendly name (default: derived from host)"),
+):
+    """Add a remote and set up SSH key access."""
+    from .remote import (
+        ensure_remote_setup, generate_key, get_remote, install_key_on_remote,
+        load_remotes_config, pull_remote, save_remotes_config,
+    )
+
+    if not name:
+        name = host.split("@")[-1].replace(".", "-")
+
+    if get_remote(name):
+        typer.echo(f"\n  Remote '{name}' already exists. Remove it first.\n")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"\n  \033[36m\033[1mAdding remote '{name}'\033[0m ({host})\n")
+
+    # Step 1: Install uv + terminalmba on remote
+    typer.echo("  1. Installing uv + terminalmba on remote...")
+    typer.echo(f"     \033[2m(you may be prompted for password)\033[0m")
+    setup = ensure_remote_setup(host)
+    if setup["ok"]:
+        typer.echo(f"     \033[32mDone\033[0m")
+    else:
+        typer.echo(f"     \033[33mWarning:\033[0m {setup['error']}")
+        typer.echo(f"     Continuing — ensure terminalmba is installed on remote manually.")
+
+    # Step 2: Generate key
+    typer.echo("  2. Generating SSH key...")
+    public_key = generate_key(name)
+    typer.echo(f"     \033[32mDone\033[0m")
+
+    # Step 3: Install restricted key on remote
+    typer.echo("  3. Installing restricted key on remote...")
+    typer.echo(f"     \033[2m(you may be prompted for password)\033[0m")
+    result = install_key_on_remote(host, public_key)
+    if not result["ok"]:
+        typer.echo(f"     \033[31mFailed:\033[0m {result['error']}")
+        typer.echo(f"\n  Manual setup: copy this to remote ~/.ssh/authorized_keys:")
+        typer.echo(f'  command="terminalmba sync-export",no-port-forwarding,no-X11-forwarding,no-agent-forwarding {public_key}\n')
+        # Still save the config so user can fix manually
+        remotes = load_remotes_config()
+        remotes.append({"name": name, "host": host})
+        save_remotes_config(remotes)
+        raise typer.Exit(code=1)
+    typer.echo(f"     \033[32mDone\033[0m")
+
+    # Step 4: Save config
+    typer.echo("  4. Saving config...")
+    remotes = load_remotes_config()
+    remotes.append({"name": name, "host": host})
+    save_remotes_config(remotes)
+    typer.echo(f"     \033[32mDone\033[0m")
+
+    # Step 5: Test
+    typer.echo("  5. Testing connection...")
+    remote = {"name": name, "host": host}
+    test_result = pull_remote(remote)
+    if test_result["ok"]:
+        typer.echo(f"     \033[32mSuccess!\033[0m {test_result['sessions']} sessions from {test_result.get('hostname', name)}")
+    else:
+        typer.echo(f"     \033[33mWarning:\033[0m {test_result['error']}")
+        typer.echo(f"     Remote saved but sync failed. Check that terminalmba is installed on remote.")
+
+    typer.echo(f"\n  \033[32mRemote '{name}' added.\033[0m")
+    typer.echo(f"  Sync:   terminalmba remote pull {name}")
+    typer.echo(f"  Test:   terminalmba remote test {name}")
+    typer.echo(f"  Remove: terminalmba remote remove {name}\n")
+
+
+@remote_app.command("list")
+def remote_list():
+    """List configured remotes."""
+    from .remote import get_remotes_status
+    remotes = get_remotes_status()
+    if not remotes:
+        typer.echo("\n  No remotes configured. Add one with: terminalmba remote add user@host\n")
+        return
+
+    typer.echo(f"\n  \033[36m\033[1m{len(remotes)} remotes\033[0m\n")
+    for r in remotes:
+        sync_info = ""
+        if r["lastSync"]:
+            from datetime import datetime
+            dt = datetime.fromtimestamp(r["lastSync"])
+            sync_info = f"  last sync: {dt.strftime('%Y-%m-%d %H:%M')}  ({r['sessions']} sessions)"
+        else:
+            sync_info = "  \033[2mnever synced\033[0m"
+        typer.echo(f"  \033[1m{r['name']}\033[0m  {r['host']}{sync_info}")
+    typer.echo("")
+
+
+@remote_app.command("test")
+def remote_test(
+    name: str = typer.Argument(..., help="Remote name"),
+):
+    """Test connectivity to a remote."""
+    from .remote import get_remote, pull_remote
+    remote = get_remote(name)
+    if not remote:
+        typer.echo(f"\n  Remote '{name}' not found.\n")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"\n  Testing '{name}' ({remote['host']})...")
+    result = pull_remote(remote)
+    if result["ok"]:
+        typer.echo(f"  \033[32mSuccess!\033[0m {result['sessions']} sessions from {result.get('hostname', name)}\n")
+    else:
+        typer.echo(f"  \033[31mFailed:\033[0m {result['error']}\n")
+        raise typer.Exit(code=1)
+
+
+@remote_app.command("pull")
+def remote_pull(
+    name: str = typer.Argument("", help="Remote name (all if omitted)"),
+):
+    """Pull sessions from remote(s)."""
+    from .remote import get_remote, load_remotes_config, pull_all_remotes, pull_remote
+
+    if name:
+        remote = get_remote(name)
+        if not remote:
+            typer.echo(f"\n  Remote '{name}' not found.\n")
+            raise typer.Exit(code=1)
+        typer.echo(f"\n  Pulling from '{name}'...")
+        result = pull_remote(remote)
+        if result["ok"]:
+            typer.echo(f"  \033[32mDone!\033[0m {result['sessions']} sessions\n")
+        else:
+            typer.echo(f"  \033[31mFailed:\033[0m {result['error']}\n")
+    else:
+        remotes = load_remotes_config()
+        if not remotes:
+            typer.echo("\n  No remotes configured.\n")
+            return
+        typer.echo(f"\n  Pulling from {len(remotes)} remotes...")
+        results = pull_all_remotes()
+        for r in results:
+            status = f"\033[32m{r['sessions']} sessions\033[0m" if r["ok"] else f"\033[31m{r['error']}\033[0m"
+            typer.echo(f"  {r['name']}: {status}")
+        typer.echo("")
+
+
+@remote_app.command("remove")
+def remote_remove(
+    name: str = typer.Argument(..., help="Remote name"),
+):
+    """Remove a remote."""
+    from .remote import get_remote, remove_remote
+    remote = get_remote(name)
+    if not remote:
+        typer.echo(f"\n  Remote '{name}' not found.\n")
+        raise typer.Exit(code=1)
+
+    remove_remote(name)
+    typer.echo(f"\n  \033[32mRemote '{name}' removed.\033[0m\n")
+
+
 if __name__ == "__main__":
     app()

@@ -1064,6 +1064,21 @@ def load_sessions() -> list[dict]:
         except OSError:
             pass
 
+    # 8. Merge cached remote sessions
+    try:
+        from .remote import get_hostname, load_all_cached_remotes
+        local_hostname = get_hostname()
+        for s in sessions.values():
+            if "host" not in s:
+                s["host"] = local_hostname
+                s["remote"] = False
+        for rs in load_all_cached_remotes():
+            rid = rs.get("id")
+            if rid and rid not in sessions:
+                sessions[rid] = rs
+    except Exception:
+        pass
+
     # Sort by last_ts descending
     result = sorted(sessions.values(), key=lambda s: s.get("last_ts", 0), reverse=True)
 

@@ -310,6 +310,40 @@ def _is_newer(latest: str, current: str) -> bool:
     return False
 
 
+# ── Remotes ────────────────────────────────────────────────
+
+@app.get("/api/remotes")
+async def api_remotes():
+    from .remote import get_remotes_status
+    return get_remotes_status()
+
+
+@app.post("/api/remotes/pull")
+async def api_remotes_pull():
+    from .remote import pull_all_remotes
+    global _sessions_cache, _sessions_cache_ts
+    results = pull_all_remotes()
+    # Invalidate session cache so next fetch includes remote data
+    from .data import _sessions_cache as sc
+    from . import data as data_mod
+    data_mod._sessions_cache = None
+    data_mod._sessions_cache_ts = 0
+    return results
+
+
+@app.post("/api/remotes/pull/{name}")
+async def api_remotes_pull_one(name: str):
+    from .remote import get_remote, pull_remote
+    from . import data as data_mod
+    remote = get_remote(name)
+    if not remote:
+        return ORJSONResponse({"error": f"Remote '{name}' not found"}, status_code=404)
+    result = pull_remote(remote)
+    data_mod._sessions_cache = None
+    data_mod._sessions_cache_ts = 0
+    return result
+
+
 # ── Changelog ──────────────────────────────────────────────
 
 @app.get("/api/changelog")

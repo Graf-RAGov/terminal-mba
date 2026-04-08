@@ -1798,6 +1798,38 @@ body {
     margin-bottom: 20px;
 }
 
+/* -- Host Badge --------------------------------------------------- */
+
+.host-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--accent-purple);
+    color: #fff;
+    opacity: 0.85;
+}
+
+.sidebar-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* -- Sync Button -------------------------------------------------- */
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.btn-icon.syncing svg {
+    animation: spin 1s linear infinite;
+}
+
 /* -- Privacy Mode ------------------------------------------------- */
 
 .btn-icon.active {
