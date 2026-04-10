@@ -778,15 +778,33 @@ def find_session_file(session_id: str, project: str = "") -> dict | None:
             if os.path.exists(f):
                 return {"file": f, "format": "claude"}
 
-    # Try .claude-local project dirs
+    # Try subagent dirs in main projects
+    if os.path.isdir(PROJECTS_DIR):
+        for proj in os.listdir(PROJECTS_DIR):
+            proj_dir = os.path.join(PROJECTS_DIR, proj)
+            if not os.path.isdir(proj_dir):
+                continue
+            for entry in os.listdir(proj_dir):
+                sa_file = os.path.join(proj_dir, entry, "subagents", f"{session_id}.jsonl")
+                if os.path.exists(sa_file):
+                    return {"file": sa_file, "format": "claude"}
+
+    # Try .claude-local project dirs (including subagents)
     for local_dir in _find_claude_local_dirs():
         local_projects = os.path.join(local_dir, "projects")
         if not os.path.isdir(local_projects):
             continue
         for proj in os.listdir(local_projects):
-            f = os.path.join(local_projects, proj, f"{session_id}.jsonl")
+            proj_dir = os.path.join(local_projects, proj)
+            f = os.path.join(proj_dir, f"{session_id}.jsonl")
             if os.path.exists(f):
                 return {"file": f, "format": "claude"}
+            if not os.path.isdir(proj_dir):
+                continue
+            for entry in os.listdir(proj_dir):
+                sa_file = os.path.join(proj_dir, entry, "subagents", f"{session_id}.jsonl")
+                if os.path.exists(sa_file):
+                    return {"file": sa_file, "format": "claude"}
 
     # Try Codex sessions dir
     codex_sessions_dir = os.path.join(CODEX_DIR, "sessions")
@@ -1192,10 +1210,61 @@ def load_sessions() -> list[dict]:
         except OSError:
             pass
 
+    # 7b. Scan subagent sessions from {project}/{session-id}/subagents/
+    def _scan_subagents(projects_dir: str, claude_dir: str) -> None:
+        if not os.path.isdir(projects_dir):
+            return
+        for proj in os.listdir(projects_dir):
+            proj_dir = os.path.join(projects_dir, proj)
+            if not os.path.isdir(proj_dir):
+                continue
+            for entry in os.listdir(proj_dir):
+                subagents_dir = os.path.join(proj_dir, entry, "subagents")
+                if not os.path.isdir(subagents_dir):
+                    continue
+                for fn in os.listdir(subagents_dir):
+                    if not fn.endswith(".jsonl"):
+                        continue
+                    sid = fn[:-6]
+                    if sid in sessions:
+                        continue
+                    file_path = os.path.join(subagents_dir, fn)
+                    summary = parse_claude_session_file(file_path)
+                    if not summary:
+                        continue
+                    # Inherit project from parent session
+                    parent_project = ""
+                    parent_sid = entry
+                    if parent_sid in sessions:
+                        parent_project = sessions[parent_sid].get("project", "")
+                    sessions[sid] = {
+                        "id": sid,
+                        "tool": summary["tool"],
+                        "project": parent_project or summary["projectPath"],
+                        "project_short": (parent_project or summary["projectPath"]).replace(HOME, "~"),
+                        "first_ts": summary["firstTs"],
+                        "last_ts": summary["lastTs"],
+                        "messages": summary["msgCount"],
+                        "first_message": summary["customTitle"] or summary["firstMsg"],
+                        "has_detail": True,
+                        "file_size": summary["fileSize"],
+                        "detail_messages": summary["msgCount"],
+                        "_claude_dir": claude_dir,
+                        "_session_file": file_path,
+                        "_subagent": True,
+                        "_parent_session": parent_sid,
+                    }
+
+    try:
+        _scan_subagents(PROJECTS_DIR, CLAUDE_DIR)
+    except Exception:
+        pass
+
     # 8. Scan .claude-local directories (Docker/claude-dk sessions)
     try:
         for local_dir in _find_claude_local_dirs():
             _scan_claude_local_sessions(local_dir, sessions)
+            _scan_subagents(os.path.join(local_dir, "projects"), local_dir)
     except Exception:
         pass
 
