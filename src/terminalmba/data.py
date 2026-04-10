@@ -1277,7 +1277,7 @@ def load_sessions() -> list[dict]:
             if "host" not in s:
                 s["host"] = local_hostname
                 s["remote"] = False
-        _valid_id = _re.compile(r"^[a-f0-9-]+$")
+        _valid_id = _re.compile(r"^[a-zA-Z0-9_-]+$")
         for rs in load_all_cached_remotes():
             rid = rs.get("id")
             # Validate: id must be UUID-like, required fields must exist
