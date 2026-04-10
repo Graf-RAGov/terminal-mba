@@ -231,42 +231,33 @@ function render(): void {
 
   if (currentView === "analytics") {
     renderAnalytics(content);
-    return;
-  }
-  if (currentView === "changelog") {
+  } else if (currentView === "changelog") {
     renderChangelog(content);
-    return;
-  }
-  if (currentView === "settings") {
+  } else if (currentView === "settings") {
     renderSettings(content);
-    return;
-  }
-  if (currentView === "projects") {
+  } else if (currentView === "projects") {
     renderProjects(content);
-    return;
-  }
-  if (currentView === "timeline") {
+  } else if (currentView === "timeline") {
     renderTimeline(content);
-    return;
-  }
-  if (currentView === "running") {
+  } else if (currentView === "running") {
     renderRunning(content);
-    return;
+  } else {
+    content.className = "content";
+
+    if (filteredSessions.length === 0) {
+      content.innerHTML = '<div class="empty-state"><p>No sessions found</p></div>';
+      return;
+    }
+
+    const layoutClass = layout === "grid" ? "grid-layout" : "list-layout";
+    const cards = filteredSessions.slice(0, renderLimit).map((s) => renderCard(s)).join("");
+    const loadMore = filteredSessions.length > renderLimit
+      ? `<div class="load-more"><button class="btn-sm" onclick="loadMoreSessions()">Load more (${filteredSessions.length - renderLimit} remaining)</button></div>`
+      : "";
+    content.innerHTML = `<div class="${layoutClass}">${cards}${loadMore}</div>`;
   }
 
-  content.className = "content";
-
-  if (filteredSessions.length === 0) {
-    content.innerHTML = '<div class="empty-state"><p>No sessions found</p></div>';
-    return;
-  }
-
-  const layoutClass = layout === "grid" ? "grid-layout" : "list-layout";
-  const cards = filteredSessions.slice(0, renderLimit).map((s) => renderCard(s)).join("");
-  const loadMore = filteredSessions.length > renderLimit
-    ? `<div class="load-more"><button class="btn-sm" onclick="loadMoreSessions()">Load more (${filteredSessions.length - renderLimit} remaining)</button></div>`
-    : "";
-  content.innerHTML = `<div class="${layoutClass}">${cards}${loadMore}</div>`;
+  if (document.documentElement.getAttribute("data-privacy") === "on") applyPrivacyRedaction(true);
 }
 
 function renderCard(s: Session): string {
@@ -370,6 +361,7 @@ async function showDetail(sessionId: string): Promise<void> {
     html += "</div></div>";
 
     panel.innerHTML = html;
+    if (document.documentElement.getAttribute("data-privacy") === "on") applyPrivacyRedaction(true);
   } catch (e) {
     panel.innerHTML = '<div class="detail-header"><button class="detail-close" onclick="closeDetail()">&times;</button></div><div class="detail-body"><div class="empty-state"><p>Failed to load session</p></div></div>';
   }
@@ -782,6 +774,44 @@ function renderSettings(container: HTMLElement): void {
 
 // ── Privacy Mode ─────────────────────────────────────────────
 
+const PRIVACY_SELECTORS = ".card-title, .card-project, .card-meta .mono, .detail-header h2, .detail-info .mono, .detail-info dd, .msg-content, .project-card, .timeline-item .card-title, .cost-badge";
+
+function randomDigits(len: number): string {
+  let s = "";
+  for (let i = 0; i < len; i++) s += Math.random() < 0.2 ? " " : String(Math.floor(Math.random() * 10));
+  return s;
+}
+
+function applyPrivacyRedaction(on: boolean): void {
+  document.querySelectorAll(PRIVACY_SELECTORS).forEach((el) => {
+    const e = el as HTMLElement;
+    if (on) {
+      if (!e.dataset.privacyOriginal) e.dataset.privacyOriginal = e.textContent || "";
+      e.textContent = randomDigits(e.dataset.privacyOriginal.length);
+    } else if (e.dataset.privacyOriginal !== undefined) {
+      e.textContent = e.dataset.privacyOriginal;
+      delete e.dataset.privacyOriginal;
+    }
+  });
+}
+
+// Reveal original text on hover, re-redact on leave
+document.addEventListener("mouseenter", (e) => {
+  const el = e.target as HTMLElement;
+  if (document.documentElement.getAttribute("data-privacy") !== "on") return;
+  if (el.dataset.privacyOriginal !== undefined) {
+    el.textContent = el.dataset.privacyOriginal;
+  }
+}, true);
+
+document.addEventListener("mouseleave", (e) => {
+  const el = e.target as HTMLElement;
+  if (document.documentElement.getAttribute("data-privacy") !== "on") return;
+  if (el.dataset.privacyOriginal !== undefined) {
+    el.textContent = randomDigits(el.dataset.privacyOriginal.length);
+  }
+}, true);
+
 function togglePrivacy(): void {
   const html = document.documentElement;
   const isOn = html.getAttribute("data-privacy") === "on";
@@ -789,6 +819,7 @@ function togglePrivacy(): void {
   html.setAttribute("data-privacy", newState);
   localStorage.setItem("terminalmba-privacy", newState);
   updatePrivacyButton(newState === "on");
+  applyPrivacyRedaction(newState === "on");
 }
 
 function updatePrivacyButton(isOn: boolean): void {

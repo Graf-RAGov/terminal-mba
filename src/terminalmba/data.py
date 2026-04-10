@@ -918,6 +918,124 @@ def get_git_commits(project_dir: str, from_ts: float, to_ts: float) -> list[dict
         return []
 
 
+# ── Docker (.claude-local) Discovery ──────────────────────
+
+_claude_local_cache: list[str] | None = None
+_claude_local_cache_ts: float = 0
+CLAUDE_LOCAL_CACHE_TTL = 60.0
+
+CLAUDE_LOCAL_SEARCH_ROOTS = [
+    os.path.join(HOME, "Documents"),
+    os.path.join(HOME, "Projects"),
+    os.path.join(HOME, "code"),
+    os.path.join(HOME, "src"),
+    os.path.join(HOME, "dev"),
+    os.path.join(HOME, "work"),
+]
+
+
+def _find_claude_local_dirs() -> list[str]:
+    """Find .claude-local directories in common project locations."""
+    global _claude_local_cache, _claude_local_cache_ts
+    now = time.time()
+    if _claude_local_cache is not None and (now - _claude_local_cache_ts) < CLAUDE_LOCAL_CACHE_TTL:
+        return _claude_local_cache
+
+    dirs: list[str] = []
+    for root in CLAUDE_LOCAL_SEARCH_ROOTS:
+        if not os.path.isdir(root):
+            continue
+        try:
+            for dirpath, dirnames, _ in os.walk(root):
+                depth = dirpath.replace(root, "").count(os.sep)
+                if depth >= 4:
+                    dirnames.clear()
+                    continue
+                if ".claude-local" in dirnames:
+                    candidate = os.path.join(dirpath, ".claude-local")
+                    dirs.append(candidate)
+                # Skip deep/irrelevant dirs
+                dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in ("node_modules", "venv", ".venv", "__pycache__", "dist", "build")]
+        except OSError:
+            pass
+
+    _claude_local_cache = dirs
+    _claude_local_cache_ts = now
+    return dirs
+
+
+def _scan_claude_local_sessions(claude_local_dir: str, sessions: dict[str, dict]) -> None:
+    """Scan a .claude-local directory for Claude sessions (same format as ~/.claude)."""
+    history = os.path.join(claude_local_dir, "history.jsonl")
+    projects_dir = os.path.join(claude_local_dir, "projects")
+
+    # Parse history.jsonl
+    if os.path.exists(history):
+        for line in read_lines(history):
+            d = _parse_json_line(line)
+            if d is None:
+                continue
+            sid = d.get("sessionId")
+            if not sid or sid in sessions:
+                continue
+            sessions[sid] = {
+                "id": sid,
+                "tool": "claude",
+                "project": d.get("project", ""),
+                "project_short": (d.get("project", "")).replace(HOME, "~"),
+                "first_ts": d.get("timestamp", 0),
+                "last_ts": d.get("timestamp", 0),
+                "messages": 0,
+                "first_message": "",
+                "_claude_dir": claude_local_dir,
+                "_docker": True,
+            }
+            s = sessions[sid]
+            s["last_ts"] = max(s["last_ts"], d.get("timestamp", 0))
+            s["messages"] += 1
+            display = d.get("display", "")
+            if display and display != "exit" and not s["first_message"]:
+                s["first_message"] = display[:200]
+
+    # Scan projects dir for session files
+    if os.path.isdir(projects_dir):
+        for proj in os.listdir(projects_dir):
+            proj_dir = os.path.join(projects_dir, proj)
+            if not os.path.isdir(proj_dir):
+                continue
+            for fn in os.listdir(proj_dir):
+                if not fn.endswith(".jsonl"):
+                    continue
+                sid = fn[:-6]
+                file_path = os.path.join(proj_dir, fn)
+                if sid in sessions:
+                    if sessions[sid].get("_claude_dir") == claude_local_dir:
+                        summary = parse_claude_session_file(file_path)
+                        if summary:
+                            merge_claude_session_detail(sessions[sid], summary, file_path)
+                    continue
+                summary = parse_claude_session_file(file_path)
+                if not summary:
+                    continue
+                sessions[sid] = {
+                    "id": sid,
+                    "tool": summary["tool"],
+                    "project": summary["projectPath"],
+                    "project_short": summary["projectPath"].replace(HOME, "~") if summary["projectPath"] else "",
+                    "first_ts": summary["firstTs"],
+                    "last_ts": summary["lastTs"],
+                    "messages": summary["msgCount"],
+                    "first_message": summary["customTitle"] or summary["firstMsg"],
+                    "has_detail": True,
+                    "file_size": summary["fileSize"],
+                    "detail_messages": summary["msgCount"],
+                    "_claude_dir": claude_local_dir,
+                    "_session_file": file_path,
+                    "_docker": True,
+                    "worktree_original_cwd": summary.get("worktreeOriginalCwd", ""),
+                }
+
+
 # ── Main Session Loading ───────────────────────────────────
 
 _sessions_cache: list[dict] | None = None
@@ -1064,7 +1182,14 @@ def load_sessions() -> list[dict]:
         except OSError:
             pass
 
-    # 8. Merge cached remote sessions
+    # 8. Scan .claude-local directories (Docker/claude-dk sessions)
+    try:
+        for local_dir in _find_claude_local_dirs():
+            _scan_claude_local_sessions(local_dir, sessions)
+    except Exception:
+        pass
+
+    # 9. Merge cached remote sessions
     try:
         import re as _re
         from .remote import get_hostname, load_all_cached_remotes
