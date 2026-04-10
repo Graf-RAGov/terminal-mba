@@ -153,9 +153,9 @@ async def api_delete_session(session_id: str, request: Request):
 # ── Search ─────────────────────────────────────────────────
 
 @app.get("/api/search")
-async def api_search(q: str = ""):
+async def api_search(q: str = "", subagents: str = "1"):
     sessions = load_sessions()
-    return search_full_text(q, sessions)
+    return search_full_text(q, sessions, include_subagents=subagents != "0")
 
 
 # ── Analytics ──────────────────────────────────────────────

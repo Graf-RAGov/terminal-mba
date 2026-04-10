@@ -1798,6 +1798,20 @@ body {
     margin-bottom: 20px;
 }
 
+/* -- Subagent toggle ---------------------------------------------- */
+
+.subagent-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+.subagent-toggle input { cursor: pointer; accent-color: var(--accent-purple); }
+
 /* -- Host chart fill ---------------------------------------------- */
 
 .host-fill { background: var(--accent-purple) !important; }

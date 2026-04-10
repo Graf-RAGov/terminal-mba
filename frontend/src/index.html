@@ -78,6 +78,10 @@
     <div class="toolbar">
         <div class="toolbar-left">
             <input type="text" id="searchInput" class="search-input" placeholder="Search sessions..." oninput="onSearchInput(this.value)">
+            <label class="subagent-toggle" title="Include subagent sessions in search">
+                <input type="checkbox" id="subagentToggle" checked onchange="onSubagentToggle(this.checked)">
+                <span>Subagents</span>
+            </label>
             <div class="toolbar-group">
                 <button class="btn-icon" id="layoutToggle" onclick="toggleLayout()" title="Toggle grid/list">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>

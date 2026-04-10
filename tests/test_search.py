@@ -46,6 +46,24 @@ def test_fuzzy_search_match():
     assert any(r["sessionId"] == "s1" for r in results)
 
 
+def test_fuzzy_search_includes_subagents():
+    sessions = [
+        {"id": "s1", "project_short": "proj", "tool": "claude", "first_message": "main session", "messages": 5, "first_ts": 1700000000000},
+        {"id": "agent-abc123", "project_short": "proj", "tool": "claude", "first_message": "subagent task", "messages": 3, "first_ts": 1700000001000, "_subagent": True},
+    ]
+    results = fuzzy_search("subagent", sessions, include_subagents=True)
+    assert any(r["sessionId"] == "agent-abc123" for r in results)
+
+
+def test_fuzzy_search_excludes_subagents():
+    sessions = [
+        {"id": "s1", "project_short": "proj", "tool": "claude", "first_message": "main session", "messages": 5, "first_ts": 1700000000000},
+        {"id": "agent-abc123", "project_short": "proj", "tool": "claude", "first_message": "subagent task", "messages": 3, "first_ts": 1700000001000, "_subagent": True},
+    ]
+    results = fuzzy_search("subagent", sessions, include_subagents=False)
+    assert not any(r["sessionId"] == "agent-abc123" for r in results)
+
+
 def test_fuzzy_search_typo():
     sessions = [
         {

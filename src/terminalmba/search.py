@@ -19,8 +19,6 @@ def build_search_index(sessions: list[dict]) -> list[dict]:
     index = []
 
     for s in sessions:
-        if not s.get("has_detail"):
-            continue
         found = find_session_file(s["id"], s.get("project", ""))
         if not found:
             continue
@@ -70,17 +68,20 @@ def get_search_index(sessions: list[dict]) -> list[dict]:
     return _search_index
 
 
-def search_full_text(query: str, sessions: list[dict]) -> list[dict]:
+def search_full_text(query: str, sessions: list[dict], include_subagents: bool = True) -> list[dict]:
     """Search across all sessions with substring matching and snippets."""
     if not query or len(query) < 2:
         return []
 
     q = query.lower()
     index = get_search_index(sessions)
+    subagent_ids = {s["id"] for s in sessions if s.get("_subagent")} if not include_subagents else set()
     results = []
 
     for entry in index:
         if q not in entry["fullText"]:
+            continue
+        if entry["sessionId"] in subagent_ids:
             continue
 
         matches = []
@@ -100,13 +101,15 @@ def search_full_text(query: str, sessions: list[dict]) -> list[dict]:
     return results
 
 
-def fuzzy_search(query: str, sessions: list[dict], threshold: int = 60) -> list[dict]:
+def fuzzy_search(query: str, sessions: list[dict], threshold: int = 60, include_subagents: bool = True) -> list[dict]:
     """Fuzzy search using rapidfuzz."""
     if not query or len(query) < 2:
         return []
 
     results = []
     for s in sessions:
+        if not include_subagents and s.get("_subagent"):
+            continue
         title = s.get("first_message", "")
         project = s.get("project_short", "") or s.get("project", "")
         text = f"{title} {project}".strip()

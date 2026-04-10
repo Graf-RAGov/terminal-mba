@@ -94,12 +94,15 @@ def stats():
 
 
 @app.command()
-def search(query: str = typer.Argument(..., help="Search query")):
+def search(
+    query: str = typer.Argument(..., help="Search query"),
+    subagents: bool = typer.Option(True, "--subagents/--no-subagents", help="Include subagent sessions"),
+):
     """Search across all session messages."""
     from .data import load_sessions
     from .search import search_full_text
     sessions = load_sessions()
-    results = search_full_text(query, sessions)
+    results = search_full_text(query, sessions, include_subagents=subagents)
 
     if not results:
         typer.echo(f'\n  No results for "{query}"\n')
@@ -111,7 +114,8 @@ def search(query: str = typer.Argument(..., help="Search query")):
         proj = s.get("project_short", "") if s else ""
         tool = s.get("tool", "?") if s else "?"
         date = s.get("last_time", "") if s else ""
-        typer.echo(f"  \033[1m{r['sessionId'][:12]}\033[0m  {tool}  {date}  \033[2m{proj}\033[0m")
+        sub_label = "  \033[33m(subagent)\033[0m" if s and s.get("_subagent") else ""
+        typer.echo(f"  \033[1m{r['sessionId'][:12]}\033[0m  {tool}  {date}  \033[2m{proj}\033[0m{sub_label}")
         for m in r["matches"][:2]:
             role = "\033[34mYOU\033[0m" if m["role"] == "user" else "\033[32mAI \033[0m"
             snippet = m["snippet"].replace("\n", " ")[:100]

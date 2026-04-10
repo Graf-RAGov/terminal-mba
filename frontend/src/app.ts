@@ -455,6 +455,16 @@ function toggleLayout(): void {
 let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 const deepSearchCache: Record<string, { sessionId: string; matches: { role: string; snippet: string }[] }[]> = {};
 let deepSearchMatchIds: Set<string> = new Set();
+let includeSubagents = true;
+
+function onSubagentToggle(checked: boolean): void {
+  includeSubagents = checked;
+  // Re-trigger deep search if there's an active query
+  if (searchQuery.length >= 2) {
+    delete deepSearchCache[searchQuery];
+    onSearchInput(searchQuery);
+  }
+}
 
 function onSearchInput(value: string): void {
   searchQuery = value;
@@ -474,7 +484,7 @@ function onSearchInput(value: string): void {
         return;
       }
       try {
-        const resp = await fetch(`/api/search?q=${encodeURIComponent(value)}`);
+        const resp = await fetch(`/api/search?q=${encodeURIComponent(value)}&subagents=${includeSubagents ? "1" : "0"}`);
         const results = await resp.json();
         deepSearchCache[value] = results;
         if (searchQuery === value) applyDeepSearchResults(results);
@@ -885,5 +895,6 @@ Object.assign(window, {
   loadMoreSessions,
   switchToProjectFilter,
   syncRemotes,
+  onSubagentToggle,
   render,
 });
