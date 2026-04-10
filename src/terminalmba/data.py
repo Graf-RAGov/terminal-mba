@@ -778,6 +778,16 @@ def find_session_file(session_id: str, project: str = "") -> dict | None:
             if os.path.exists(f):
                 return {"file": f, "format": "claude"}
 
+    # Try .claude-local project dirs
+    for local_dir in _find_claude_local_dirs():
+        local_projects = os.path.join(local_dir, "projects")
+        if not os.path.isdir(local_projects):
+            continue
+        for proj in os.listdir(local_projects):
+            f = os.path.join(local_projects, proj, f"{session_id}.jsonl")
+            if os.path.exists(f):
+                return {"file": f, "format": "claude"}
+
     # Try Codex sessions dir
     codex_sessions_dir = os.path.join(CODEX_DIR, "sessions")
     if os.path.isdir(codex_sessions_dir):
