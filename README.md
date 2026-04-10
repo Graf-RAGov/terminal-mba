@@ -92,7 +92,7 @@ This sets up SSH key authentication automatically. You can find the remote Mac's
 **3. Sync sessions**
 
 ```bash
-terminalmba remote sync
+terminalmba remote pull
 ```
 
 ## Tech stack

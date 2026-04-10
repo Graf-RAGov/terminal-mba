@@ -385,7 +385,7 @@ def remote_add(
     if not result["ok"]:
         typer.echo(f"     \033[31mFailed:\033[0m {result['error']}")
         typer.echo(f"\n  Manual setup: copy this to remote ~/.ssh/authorized_keys:")
-        typer.echo(f'  command="terminalmba sync-export",no-port-forwarding,no-X11-forwarding,no-agent-forwarding {public_key}\n')
+        typer.echo(f'  restrict,command="export PATH=$HOME/.local/bin:$PATH && terminalmba sync-export" {public_key}\n')
         # Still save the config so user can fix manually
         remotes = load_remotes_config()
         remotes.append({"name": name, "host": host})
