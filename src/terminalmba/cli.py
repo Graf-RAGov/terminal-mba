@@ -94,6 +94,46 @@ def stats():
 
 
 @app.command()
+def trending():
+    """Show monthly cost trends."""
+    from .data import load_sessions
+    from .cost import get_cost_analytics
+    sessions = load_sessions()
+    data = get_cost_analytics(sessions)
+
+    months = sorted(data.get("byMonth", {}).items())
+    if not months:
+        typer.echo("\n  No cost data available.\n")
+        return
+
+    typer.echo(f"\n  \033[36m\033[1mMonthly Cost Trends\033[0m\n")
+    max_cost = max(m[1]["cost"] for m in months)
+    bar_width = 40
+
+    for month, info in months:
+        cost = info["cost"]
+        sessions_count = info["sessions"]
+        bar_len = int((cost / max_cost) * bar_width) if max_cost > 0 else 0
+        bar = "█" * bar_len + "░" * (bar_width - bar_len)
+        typer.echo(f"  {month}  {bar}  \033[32m${cost:>8.2f}\033[0m  {sessions_count:>4} sessions")
+
+    # Month-over-month changes
+    if len(months) >= 2:
+        typer.echo(f"\n  \033[1mMonth-over-Month:\033[0m")
+        for i in range(1, len(months)):
+            prev_cost = months[i - 1][1]["cost"]
+            curr_cost = months[i][1]["cost"]
+            if prev_cost > 0:
+                change = ((curr_cost - prev_cost) / prev_cost) * 100
+                arrow = "↑" if change >= 0 else "↓"
+                color = "\033[31m" if change >= 0 else "\033[32m"
+                typer.echo(f"  {months[i-1][0]} → {months[i][0]}  {color}{arrow} {abs(change):.0f}%\033[0m  (${prev_cost:.0f} → ${curr_cost:.0f})")
+
+    typer.echo(f"\n  Total: \033[32m${data['totalCost']:.2f}\033[0m across {data['totalSessions']} sessions")
+    typer.echo(f"  Daily rate: \033[33m${data['dailyRate']:.2f}/day\033[0m\n")
+
+
+@app.command()
 def search(
     query: str = typer.Argument(..., help="Search query"),
     subagents: bool = typer.Option(True, "--subagents/--no-subagents", help="Include subagent sessions"),

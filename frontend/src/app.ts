@@ -231,6 +231,8 @@ function render(): void {
 
   if (currentView === "analytics") {
     renderAnalytics(content);
+  } else if (currentView === "trending") {
+    renderTrending(content);
   } else if (currentView === "changelog") {
     renderChangelog(content);
   } else if (currentView === "settings") {
@@ -653,13 +655,37 @@ function renderRunning(container: HTMLElement): void {
 
 // ── Analytics ─────────────────────────────────────────────────
 
+let analyticsCache: any = null;
+let analyticsCacheTs = 0;
+
+async function fetchAnalyticsData(): Promise<any> {
+  const now = Date.now();
+  if (analyticsCache && (now - analyticsCacheTs) < 60000) return analyticsCache;
+  const resp = await fetch("/api/analytics/cost");
+  analyticsCache = await resp.json();
+  analyticsCacheTs = now;
+  return analyticsCache;
+}
+
 async function renderAnalytics(container: HTMLElement): Promise<void> {
   container.className = "content";
+  if (analyticsCache) {
+    _renderAnalyticsHTML(container, analyticsCache);
+    // Refresh in background
+    fetchAnalyticsData().then(d => _renderAnalyticsHTML(container, d));
+    return;
+  }
   container.innerHTML = '<div class="loading">Loading analytics...</div>';
-
   try {
-    const resp = await fetch("/api/analytics/cost");
-    const data = await resp.json();
+    const data = await fetchAnalyticsData();
+    _renderAnalyticsHTML(container, data);
+  } catch {
+    container.innerHTML = '<div class="empty-state"><p>Failed to load analytics</p></div>';
+  }
+}
+
+function _renderAnalyticsHTML(container: HTMLElement, data: any): void {
+  if (currentView !== "analytics") return;
 
     let html = `<div class="analytics-container">
       <h2>Cost Analytics</h2>
@@ -714,9 +740,120 @@ async function renderAnalytics(container: HTMLElement): Promise<void> {
     }
     html += "</div></div></div>";
 
+    const updated = new Date(analyticsCacheTs).toLocaleTimeString();
+    html += `<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:8px 20px">Updated ${updated}</div>`;
+
+    container.innerHTML = html;
+}
+
+// ── Trending ──────────────────────────────────────────────────
+
+async function renderTrending(container: HTMLElement): Promise<void> {
+  container.className = "content";
+  if (!analyticsCache) {
+    container.innerHTML = '<div class="loading">Loading trends...</div>';
+  }
+  try {
+    const data = await fetchAnalyticsData();
+    if (currentView !== "trending") return;
+
+    const months = Object.entries(data.byMonth || {}).sort(([a], [b]) => a.localeCompare(b)) as [string, any][];
+    const weeks = Object.entries(data.byWeek || {}).sort(([a], [b]) => a.localeCompare(b)) as [string, any][];
+    const days = Object.entries(data.byDay || {}).sort(([a], [b]) => a.localeCompare(b)) as [string, any][];
+
+    let html = '<div class="analytics-container"><h2>Trending</h2>';
+
+    // Monthly cost bars
+    if (months.length > 0) {
+      const maxCost = Math.max(...months.map(([, m]) => m.cost), 0.01);
+      html += '<div class="chart-section"><h3>Monthly Cost</h3><div class="trend-bars">';
+      for (const [month, info] of months) {
+        const pct = (info.cost / maxCost) * 100;
+        const label = month.slice(2); // "26-01" from "2026-01"
+        html += `<div class="trend-bar-col">
+          <div class="trend-bar-val">$${info.cost >= 1000 ? Math.round(info.cost).toLocaleString() : info.cost.toFixed(0)}</div>
+          <div class="trend-bar-track"><div class="trend-bar-fill" style="height:${pct}%"></div></div>
+          <div class="trend-bar-label">${label}</div>
+          <div class="trend-bar-sub">${info.sessions} sess</div>
+        </div>`;
+      }
+      html += '</div></div>';
+
+      // Month-over-month changes
+      if (months.length >= 2) {
+        html += '<div class="chart-section"><h3>Month-over-Month</h3><div class="trend-changes">';
+        for (let i = 1; i < months.length; i++) {
+          const prev = months[i - 1][1].cost;
+          const curr = months[i][1].cost;
+          const change = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+          const arrow = change >= 0 ? "↑" : "↓";
+          const color = change >= 0 ? "var(--accent-red)" : "var(--accent-green)";
+          html += `<div class="trend-change-item">
+            <span class="trend-change-label">${months[i - 1][0]} → ${months[i][0]}</span>
+            <span class="trend-change-val" style="color:${color}">${arrow} ${Math.abs(change).toFixed(0)}%</span>
+            <span class="trend-change-detail">$${prev.toFixed(0)} → $${curr.toFixed(0)}</span>
+          </div>`;
+        }
+        html += '</div></div>';
+      }
+    }
+
+    // Weekly cost bars (last 12 weeks)
+    const recentWeeks = weeks.slice(-12);
+    if (recentWeeks.length > 0) {
+      const maxWeekCost = Math.max(...recentWeeks.map(([, w]) => w.cost), 0.01);
+      html += '<div class="chart-section"><h3>Weekly Cost (last 12 weeks)</h3><div class="trend-bars trend-bars-small">';
+      for (const [week, info] of recentWeeks) {
+        const pct = (info.cost / maxWeekCost) * 100;
+        const label = week.slice(5); // "03-24" from "2026-03-24"
+        html += `<div class="trend-bar-col">
+          <div class="trend-bar-val">$${info.cost.toFixed(0)}</div>
+          <div class="trend-bar-track"><div class="trend-bar-fill trend-fill-blue" style="height:${pct}%"></div></div>
+          <div class="trend-bar-label">${label}</div>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Daily sparkline (last 30 days)
+    const recentDays = days.slice(-30);
+    if (recentDays.length > 0) {
+      const maxDayCost = Math.max(...recentDays.map(([, d]) => d.cost), 0.01);
+      html += '<div class="chart-section"><h3>Daily Cost (last 30 days)</h3><div class="trend-bars trend-bars-spark">';
+      for (const [day, info] of recentDays) {
+        const pct = (info.cost / maxDayCost) * 100;
+        const label = day.slice(8); // day number
+        html += `<div class="trend-bar-col">
+          <div class="trend-bar-track"><div class="trend-bar-fill trend-fill-cyan" style="height:${pct}%" title="$${info.cost.toFixed(2)} on ${day}"></div></div>
+          <div class="trend-bar-label">${label}</div>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    // Top projects by cost (horizontal bars)
+    const projects = Object.entries(data.byProject || {}).sort(([, a]: any, [, b]: any) => b.cost - a.cost).slice(0, 10) as [string, any][];
+    if (projects.length > 0) {
+      const maxProjCost = projects[0][1].cost;
+      html += '<div class="chart-section"><h3>Top Projects by Cost</h3><div class="hbar-chart">';
+      for (const [proj, info] of projects) {
+        const pct = (info.cost / maxProjCost) * 100;
+        const name = proj.replace(/^~\//, "");
+        html += `<div class="hbar-row">
+          <span class="hbar-name" title="${escHtml(proj)}">${escHtml(name)}</span>
+          <div class="hbar-track"><div class="hbar-fill trend-fill-purple" style="width:${pct}%"></div></div>
+          <span class="hbar-val">$${info.cost.toFixed(2)} (${info.sessions})</span>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+
+    html += '</div>';
+    const updated = new Date(analyticsCacheTs).toLocaleTimeString();
+    html += `<div style="text-align:right;font-size:11px;color:var(--text-muted);padding:8px 20px">Updated ${updated}</div>`;
     container.innerHTML = html;
   } catch {
-    container.innerHTML = '<div class="empty-state"><p>Failed to load analytics</p></div>';
+    container.innerHTML = '<div class="empty-state"><p>Failed to load trends</p></div>';
   }
 }
 

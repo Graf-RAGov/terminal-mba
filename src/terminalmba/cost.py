@@ -161,6 +161,7 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
     by_day: dict = {}
     by_project: dict = {}
     by_week: dict = {}
+    by_month: dict = {}
     by_agent: dict = {}
     by_host: dict = {}
     total_cost = 0
@@ -241,6 +242,15 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
             except (ValueError, TypeError):
                 pass
 
+        # By month
+        if s.get("date"):
+            month_key = s["date"][:7]  # YYYY-MM
+            if month_key not in by_month:
+                by_month[month_key] = {"cost": 0, "sessions": 0, "tokens": 0}
+            by_month[month_key]["cost"] += cost
+            by_month[month_key]["sessions"] += 1
+            by_month[month_key]["tokens"] += tokens
+
         proj = s.get("project_short") or s.get("project") or "unknown"
         if proj not in by_project:
             by_project[proj] = {"cost": 0, "sessions": 0, "tokens": 0}
@@ -286,6 +296,7 @@ def get_cost_analytics(sessions: list[dict]) -> dict:
         "byProject": by_project,
         "topSessions": session_costs[:10],
         "byAgent": by_agent,
+        "byMonth": by_month,
         "byHost": by_host,
         "agentNoCostData": agent_no_cost_data,
     }

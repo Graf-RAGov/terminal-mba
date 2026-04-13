@@ -1798,6 +1798,94 @@ body {
     margin-bottom: 20px;
 }
 
+/* -- Trending bars ------------------------------------------------ */
+
+.trend-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 200px;
+    padding-bottom: 4px;
+}
+.trend-bars-small { height: 140px; }
+.trend-bars-spark { height: 80px; gap: 3px; }
+
+.trend-bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    min-width: 0;
+}
+.trend-bar-val {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-green);
+    margin-bottom: 4px;
+    white-space: nowrap;
+}
+.trend-bar-track {
+    flex: 1;
+    width: 100%;
+    max-width: 60px;
+    display: flex;
+    align-items: flex-end;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
+}
+.trend-bar-fill {
+    width: 100%;
+    background: linear-gradient(to top, var(--accent-green), var(--accent-blue));
+    border-radius: 4px 4px 0 0;
+    transition: height 0.5s ease;
+    min-height: 2px;
+}
+.trend-fill-blue { background: linear-gradient(to top, var(--accent-blue), var(--accent-purple)); }
+.trend-fill-cyan { background: var(--accent-cyan); }
+.trend-fill-purple { background: var(--accent-purple) !important; }
+.trend-bar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+.trend-bar-sub {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+.trend-bars-spark .trend-bar-val { display: none; }
+.trend-bars-spark .trend-bar-track { max-width: 20px; }
+
+/* -- Month-over-month changes ------------------------------------- */
+
+.trend-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.trend-change-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border-radius: 8px;
+}
+.trend-change-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    min-width: 160px;
+}
+.trend-change-val {
+    font-size: 16px;
+    font-weight: 700;
+    min-width: 80px;
+}
+.trend-change-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
 /* -- Subagent toggle ---------------------------------------------- */
 
 .subagent-toggle {
