@@ -160,17 +160,35 @@ async def api_search(q: str = "", subagents: str = "1"):
 
 # ── Analytics ──────────────────────────────────────────────
 
+_analytics_cache: dict | None = None
+_analytics_cache_ts: float = 0
+_ANALYTICS_CACHE_TTL = 120.0  # 2 minutes
+
+
 @app.get("/api/analytics/cost")
 async def api_cost_analytics(request: Request):
-    sessions = load_sessions()
+    global _analytics_cache, _analytics_cache_ts
+    import time as _time
     params = request.query_params
     from_date = params.get("from")
     to_date = params.get("to")
+
+    # Use cache for unfiltered requests
+    now = _time.time()
+    if not from_date and not to_date and _analytics_cache and (now - _analytics_cache_ts) < _ANALYTICS_CACHE_TTL:
+        return _analytics_cache
+
+    sessions = load_sessions()
     if from_date:
         sessions = [s for s in sessions if s.get("date", "") >= from_date]
     if to_date:
         sessions = [s for s in sessions if s.get("date", "") <= to_date]
-    return get_cost_analytics(sessions)
+    result = get_cost_analytics(sessions)
+
+    if not from_date and not to_date:
+        _analytics_cache = result
+        _analytics_cache_ts = now
+    return result
 
 
 # ── Active sessions ────────────────────────────────────────

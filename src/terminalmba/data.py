@@ -1068,7 +1068,7 @@ def _scan_claude_local_sessions(claude_local_dir: str, sessions: dict[str, dict]
 
 _sessions_cache: list[dict] | None = None
 _sessions_cache_ts: float = 0
-SESSIONS_CACHE_TTL = 10.0  # 10 seconds
+SESSIONS_CACHE_TTL = 30.0  # 30 seconds (includes cost pre-computation)
 
 
 def load_sessions() -> list[dict]:
@@ -1323,6 +1323,17 @@ def load_sessions() -> list[dict]:
         s["git_root"] = s.get("worktree_original_cwd", "") or (
             _git_root_cache.get(s.get("project", ""), "") if s.get("project") else ""
         )
+
+    # Pre-compute costs for all sessions that don't have _cost yet
+    try:
+        from .cost import compute_session_cost
+        for s in result:
+            if not s.get("_cost"):
+                c = compute_session_cost(s["id"], s.get("project", ""))
+                if c["cost"] > 0 or c["inputTokens"] > 0:
+                    s["_cost"] = c
+    except Exception:
+        pass
 
     _sessions_cache = result
     _sessions_cache_ts = time.time()
