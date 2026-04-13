@@ -28,6 +28,8 @@ interface ActiveInfo {
   cpu: number;
   memoryMB: number;
   pid: number;
+  host?: string;
+  cacheTs?: number;
 }
 
 // ── State ─────────────────────────────────────────────────────
@@ -145,6 +147,8 @@ async function fetchActive(): Promise<void> {
           cpu: a.cpu,
           memoryMB: a.memoryMB,
           pid: a.pid,
+          host: a.host,
+          cacheTs: a.cacheTs,
         };
       }
     }
@@ -262,11 +266,20 @@ function render(): void {
   if (document.documentElement.getAttribute("data-privacy") === "on") applyPrivacyRedaction(true);
 }
 
+function liveBadgeText(info: ActiveInfo): string {
+  const label = info.status === "active" ? "LIVE" : "WAITING";
+  if (info.cacheTs) {
+    const age = timeAgo(info.cacheTs);
+    return `${label} (${age})`;
+  }
+  return label;
+}
+
 function renderCard(s: Session): string {
   const active = activeSessions[s.id];
   const activeClass = active ? (active.status === "active" ? "card-active" : "card-waiting") : "";
   const activeBadge = active
-    ? `<span class="live-badge ${active.status === "active" ? "live-active" : "live-waiting"}">${active.status === "active" ? "LIVE" : "WAITING"}</span>`
+    ? `<span class="live-badge ${active.status === "active" ? "live-active" : "live-waiting"}">${liveBadgeText(active)}</span>`
     : "";
   const starred = stars.includes(s.id) ? "starred" : "";
   const projectColor = getProjectColor(s.project_short || s.project);
@@ -635,9 +648,9 @@ function renderRunning(container: HTMLElement): void {
       const projectName = getProjectName(s.project_short || s.project);
       html += `<div class="running-card ${statusClass}" onclick="showDetail('${s.id}')">
         <div class="running-card-header">
-          <span class="live-badge ${info.status === "active" ? "live-active" : "live-waiting"}">${info.status === "active" ? "LIVE" : "WAITING"}</span>
+          <span class="live-badge ${info.status === "active" ? "live-active" : "live-waiting"}">${liveBadgeText(info)}</span>
           <span class="running-project">${escHtml(projectName)}</span>
-          <span class="running-tool">${escHtml(s.tool)}</span>
+          <span class="running-tool">${escHtml(s.tool)}</span>${info.host ? ` <span class="host-badge">${escHtml(info.host)}</span>` : ""}
         </div>
         <div class="card-title">${escHtml(s.first_message || "(no title)")}</div>
         <div class="running-stats">

@@ -66,13 +66,19 @@ def sync_export() -> bytes:
     """Export all local sessions as gzipped JSON. Called via SSH."""
     from .data import load_sessions
     from .cost import compute_session_cost
+    from .active import get_active_sessions
     hostname = get_hostname()
     sessions = load_sessions()
     for s in sessions:
         cost = compute_session_cost(s["id"], s.get("project", ""))
         if cost["cost"] > 0 or cost["inputTokens"] > 0:
             s["_cost"] = cost
-    payload = {"hostname": hostname, "timestamp": time.time(), "sessions": sessions}
+    payload = {
+        "hostname": hostname,
+        "timestamp": time.time(),
+        "sessions": sessions,
+        "active": get_active_sessions(),
+    }
     raw = orjson.dumps(payload)
     return gzip.compress(raw)
 
@@ -163,6 +169,29 @@ def load_all_cached_remotes() -> list[dict]:
         sessions, _ = load_cached_remote(remote["name"])
         all_sessions.extend(sessions)
     return all_sessions
+
+
+def load_all_cached_remote_active() -> list[dict]:
+    """Load active session data from all cached remotes."""
+    all_active: list[dict] = []
+    for remote in load_remotes_config():
+        name = remote["name"]
+        _validate_name(name)
+        cache_file = REMOTES_CACHE_DIR / f"{name}.json.gz"
+        if not cache_file.exists():
+            continue
+        try:
+            raw = gzip.decompress(cache_file.read_bytes())
+            payload = orjson.loads(raw)
+            cache_ts = payload.get("timestamp", 0)
+            for a in payload.get("active", []):
+                a["host"] = name
+                a["remote"] = True
+                a["cacheTs"] = cache_ts
+            all_active.extend(payload.get("active", []))
+        except Exception:
+            pass
+    return all_active
 
 
 def get_remotes_status() -> list[dict]:

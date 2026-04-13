@@ -195,7 +195,10 @@ async def api_cost_analytics(request: Request):
 
 @app.get("/api/active")
 async def api_active():
-    return get_active_sessions()
+    from .remote import load_all_cached_remote_active
+    local = get_active_sessions()
+    remote = load_all_cached_remote_active()
+    return local + remote
 
 
 # ── Terminals ──────────────────────────────────────────────
