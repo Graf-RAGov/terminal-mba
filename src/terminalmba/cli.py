@@ -319,7 +319,7 @@ def restart(
     typer.echo(f"\n  Stopping TerminalMBA on port {port}...")
     try:
         result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
+            ["lsof", "-ti", f":{port}", "-sTCP:LISTEN"],
             capture_output=True, timeout=5, text=True,
         )
         if result.stdout.strip():
@@ -344,7 +344,7 @@ def stop(
     """Stop the server."""
     try:
         result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
+            ["lsof", "-ti", f":{port}", "-sTCP:LISTEN"],
             capture_output=True, timeout=5, text=True,
         )
         if result.stdout.strip():
