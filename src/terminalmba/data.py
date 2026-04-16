@@ -105,6 +105,7 @@ def parse_claude_session_file(session_file: str) -> dict | None:
     last_ts = stat.st_mtime * 1000
     entrypoint_found = False
     worktree_original_cwd = ""
+    last_recap = ""
 
     for line in lines:
         entry = _parse_json_line(line)
@@ -137,6 +138,11 @@ def parse_claude_session_file(session_file: str) -> dict | None:
                 and entry.get("worktreeSession", {}).get("originalCwd")):
             worktree_original_cwd = entry["worktreeSession"]["originalCwd"]
 
+        if entry_type == "system" and entry.get("subtype") == "away_summary":
+            recap_text = entry.get("content", "").strip()
+            if recap_text:
+                last_recap = recap_text[:300]
+
         if not entrypoint_found and entry_type == "user" and entry.get("entrypoint"):
             entrypoint_found = True
             if entry["entrypoint"] != "cli":
@@ -164,6 +170,7 @@ def parse_claude_session_file(session_file: str) -> dict | None:
         "lastTs": last_ts,
         "fileSize": stat.st_size,
         "worktreeOriginalCwd": worktree_original_cwd,
+        "lastRecap": last_recap,
     }
 
 
@@ -186,6 +193,9 @@ def merge_claude_session_detail(session: dict, summary: dict, session_file: str)
 
     if summary.get("customTitle"):
         session["first_message"] = summary["customTitle"]
+
+    if summary.get("lastRecap"):
+        session["recap"] = summary["lastRecap"]
 
 
 # ── Codex Session Parsing ──────────────────────────────────
@@ -1061,6 +1071,7 @@ def _scan_claude_local_sessions(claude_local_dir: str, sessions: dict[str, dict]
                     "_session_file": file_path,
                     "_docker": True,
                     "worktree_original_cwd": summary.get("worktreeOriginalCwd", ""),
+                    "recap": summary.get("lastRecap", ""),
                 }
 
 
@@ -1206,6 +1217,7 @@ def load_sessions() -> list[dict]:
                         "_claude_dir": CLAUDE_DIR,
                         "_session_file": file_path,
                         "worktree_original_cwd": summary.get("worktreeOriginalCwd", ""),
+                        "recap": summary.get("lastRecap", ""),
                     }
         except OSError:
             pass
@@ -1253,6 +1265,7 @@ def load_sessions() -> list[dict]:
                         "_session_file": file_path,
                         "_subagent": True,
                         "_parent_session": parent_sid,
+                        "recap": summary.get("lastRecap", ""),
                     }
 
     try:

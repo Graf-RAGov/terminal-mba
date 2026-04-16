@@ -21,6 +21,7 @@ interface Session {
   git_root: string;
   host?: string;
   remote?: boolean;
+  recap?: string;
 }
 
 interface ActiveInfo {
@@ -44,6 +45,8 @@ let hostFilter: string | null = null;
 let activeSessions: Record<string, ActiveInfo> = {};
 let stars: string[] = JSON.parse(localStorage.getItem("terminalmba-stars") || "[]");
 let tags: Record<string, string[]> = JSON.parse(localStorage.getItem("terminalmba-tags") || "{}");
+let terminalPref = localStorage.getItem("terminalmba-terminal") || "";
+let availableTerminals: { id: string; name: string; available: boolean }[] = [];
 let renderLimit = 60;
 const RENDER_PAGE_SIZE = 60;
 
@@ -93,6 +96,11 @@ function timeAgo(ts: number): string {
 function escHtml(s: string): string {
   if (!s) return "";
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function sessionTitle(s: { recap?: string; first_message: string }): string {
+  if (s.recap) return s.recap.replace(/\s*\(disable recaps in \/config\)\s*$/, "");
+  return s.first_message || "(no title)";
 }
 
 function showToast(msg: string): void {
@@ -219,7 +227,7 @@ function filterAndRender(): void {
     if (currentView === "starred" && !stars.includes(s.id)) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const text = `${s.first_message} ${s.project} ${s.id}`.toLowerCase();
+      const text = `${s.first_message} ${s.recap || ""} ${s.project} ${s.id}`.toLowerCase();
       if (!text.includes(q) && !deepSearchMatchIds.has(s.id)) return false;
     }
     return true;
@@ -296,7 +304,7 @@ function renderCard(s: Session): string {
       ${activeBadge}
       <span class="card-time">${timeAgo(s.last_ts)}</span>
     </div>
-    <div class="card-title">${escHtml(s.first_message || "(no title)")}</div>
+    <div class="card-title">${escHtml(sessionTitle(s))}</div>
     <div class="card-meta">
       <span class="card-project" style="color:${projectColor}">${escHtml(projectName)}</span>
       <span class="card-msgs">${s.messages} msgs</span>
@@ -333,7 +341,7 @@ async function showDetail(sessionId: string): Promise<void> {
 
     let html = `<div class="detail-header">
       <div>
-        <h2 style="font-size:16px;font-weight:600;margin:0">${escHtml(session?.first_message || sessionId)}</h2>
+        <h2 style="font-size:16px;font-weight:600;margin:0">${escHtml(session ? sessionTitle(session) : sessionId)}</h2>
         <div class="card-meta" style="margin-top:6px">
           ${getToolBadge(session?.tool || "")}
           <span>${escHtml(session?.project_short || "")}</span>
@@ -359,7 +367,10 @@ async function showDetail(sessionId: string): Promise<void> {
       <dt>Date</dt><dd>${session?.date || ""}</dd>
     </div>`;
 
+    const isRemote = session?.remote;
+    const resumable = !isRemote && (session?.tool === "claude" || session?.tool === "codex");
     html += `<div class="detail-actions">
+      ${resumable ? `<button class="launch-btn btn-primary" onclick="resumeSession('${sessionId}', '${escHtml(session?.tool || "claude")}', '${escHtml(session?.project || "")}')">Resume</button>` : ""}
       <button class="launch-btn btn-secondary" onclick="exportSession('${sessionId}')">Export</button>
       <button class="launch-btn btn-delete" onclick="deleteSession('${sessionId}')">Delete</button>
     </div>`;
@@ -420,6 +431,41 @@ async function deleteSession(sessionId: string): Promise<void> {
 
 function exportSession(sessionId: string): void {
   window.open(`/api/session/${sessionId}/export`, "_blank");
+}
+
+async function resumeSession(sessionId: string, tool: string = "claude", project: string = ""): Promise<void> {
+  const session = allSessions.find((s) => s.id === sessionId);
+  if (session?.remote) {
+    showToast("Cannot resume remote sessions");
+    return;
+  }
+  try {
+    const resp = await fetch("/api/launch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        tool: tool || session?.tool || "claude",
+        project: project || session?.project || "",
+        terminal: terminalPref,
+      }),
+    });
+    const result = await resp.json();
+    if (result.ok) {
+      showToast("Opened in terminal");
+    } else {
+      showToast("Failed to open terminal");
+    }
+  } catch {
+    showToast("Failed to open terminal");
+  }
+}
+
+async function fetchTerminals(): Promise<void> {
+  try {
+    const resp = await fetch("/api/terminals");
+    availableTerminals = await resp.json();
+  } catch {}
 }
 
 // ── View Switching ────────────────────────────────────────────
@@ -616,7 +662,7 @@ function renderTimeline(container: HTMLElement): void {
           ${getToolBadge(s.tool)}
           <span class="card-time">${s.first_time || ""}</span>
         </div>
-        <div class="card-title">${escHtml(s.first_message || "(no title)")}</div>
+        <div class="card-title">${escHtml(sessionTitle(s))}</div>
         <div class="card-meta">
           <span class="card-project" style="color:${projectColor}">${escHtml(projectName)}</span>
           <span class="card-msgs">${s.messages} msgs</span>
@@ -652,7 +698,7 @@ function renderRunning(container: HTMLElement): void {
           <span class="running-project">${escHtml(projectName)}</span>
           <span class="running-tool">${escHtml(s.tool)}</span>${info.host ? ` <span class="host-badge">${escHtml(info.host)}</span>` : ""}
         </div>
-        <div class="card-title">${escHtml(s.first_message || "(no title)")}</div>
+        <div class="card-title">${escHtml(sessionTitle(s))}</div>
         <div class="running-stats">
           <div class="running-stat"><span class="running-stat-val">${s.messages}</span><span class="running-stat-label">Messages</span></div>
           <div class="running-stat"><span class="running-stat-val">${info.cpu ? info.cpu.toFixed(0) + "%" : "-"}</span><span class="running-stat-label">CPU</span></div>
@@ -921,6 +967,14 @@ function renderSettings(container: HTMLElement): void {
       </select>
     </div>
     <div class="settings-group">
+      <label class="settings-label">Terminal</label>
+      <select class="settings-select" onchange="terminalPref=this.value; localStorage.setItem('terminalmba-terminal',this.value); switchView('settings')">
+        <option value="" ${terminalPref === "" ? "selected" : ""}>Auto-detect</option>
+        ${availableTerminals.filter((t) => t.available).map((t) => `<option value="${t.id}" ${terminalPref === t.id ? "selected" : ""}>${escHtml(t.name)}</option>`).join("")}
+      </select>
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">Terminal used for Resume Session</div>
+    </div>
+    <div class="settings-group">
       <label class="settings-label">Starred Sessions</label>
       <div style="font-size:14px;color:var(--text-primary)">${stars.length} starred sessions</div>
       ${stars.length > 0 ? `<button class="btn-sm" style="margin-top:8px" onclick="if(confirm('Clear all stars?')){stars=[];localStorage.setItem('terminalmba-stars','[]');switchView('settings')}">Clear All Stars</button>` : ""}
@@ -1021,6 +1075,10 @@ fetchSessions().then(() => {
 });
 fetchVersion();
 fetchActive();
+fetchTerminals();
+
+// Expose to onclick handlers in templates
+(window as any).resumeSession = resumeSession;
 
 // Poll active sessions every 5 seconds
 setInterval(fetchActive, 5000);

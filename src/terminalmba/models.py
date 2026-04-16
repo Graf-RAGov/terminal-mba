@@ -22,6 +22,7 @@ class Session(BaseModel):
     date: str = ""
     git_root: str = ""
     worktree_original_cwd: str = ""
+    recap: str = ""
 
 
 class Message(BaseModel):
